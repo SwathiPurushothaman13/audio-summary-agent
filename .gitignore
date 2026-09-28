@@ -1,0 +1,17 @@
+.DS_Store
+__pycache__/
+*.pyc
+
+.venv/
+venv/
+
+.env
+.env.*
+
+.catalystrc
+catalyst-debug.log
+
+*.mp3
+*.wav
+*.m4a
+

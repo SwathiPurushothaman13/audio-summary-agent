@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Audio Transcription</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f6f8;
+            margin: 0;
+            padding: 40px;
+        }
+
+        .container {
+            max-width: 700px;
+            margin: auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        }
+
+        h1 {
+            margin-top: 0;
+        }
+
+        label {
+            display: block;
+            margin-top: 20px;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        select,
+        input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        button {
+            margin-top: 25px;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        #status {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+
+        #transcript {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f7f7f7;
+            border-radius: 8px;
+            white-space: pre-wrap;
+            min-height: 100px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>Audio Transcription</h1>
+
+    <p>
+        Upload a Japanese or Chinese MP3 recording
+        and convert it into text.
+    </p>
+
+    <label for="language">
+        Recording Language
+    </label>
+
+    <select id="language">
+        <option value="ja">
+            Japanese
+        </option>
+
+        <option value="zh">
+            Chinese
+        </option>
+    </select>
+
+    <label for="audioFile">
+        MP3 Recording
+    </label>
+
+    <input
+        type="file"
+        id="audioFile"
+        accept=".mp3,audio/mpeg"
+    >
+
+    <button id="transcribeButton">
+        Transcribe
+    </button>
+
+    <div id="status"></div>
+
+    <div id="transcript"></div>
+
+</div>
+
+
+<script>
+
+const button =
+    document.getElementById(
+        "transcribeButton"
+    );
+
+const status =
+    document.getElementById(
+        "status"
+    );
+
+const transcript =
+    document.getElementById(
+        "transcript"
+    );
+
+
+button.addEventListener(
+    "click",
+    async function () {
+
+        const fileInput =
+            document.getElementById(
+                "audioFile"
+            );
+
+        const language =
+            document.getElementById(
+                "language"
+            ).value;
+
+        if (!fileInput.files.length) {
+
+            status.textContent =
+                "Please choose an MP3 file.";
+
+            return;
+        }
+
+        const file =
+            fileInput.files[0];
+
+        const formData =
+            new FormData();
+
+        formData.append(
+            "audio",
+            file
+        );
+
+        formData.append(
+            "language",
+            language
+        );
+
+        status.textContent =
+            "Transcribing...";
+
+        transcript.textContent = "";
+
+        button.disabled = true;
+
+        try {
+
+            const response =
+                await fetch(
+                    "/transcribe",
+                    {
+                        method: "POST",
+                        body: formData
+                    }
+                );
+
+            const data =
+                await response.json();
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.message ||
+                    "Transcription failed."
+                );
+            }
+
+            status.textContent =
+                "Transcription completed.";
+
+            transcript.textContent =
+                data.transcript ||
+                "No speech was detected.";
+
+        }
+        catch (error) {
+
+            status.textContent =
+                "Error";
+
+            transcript.textContent =
+                error.message;
+        }
+        finally {
+
+            button.disabled = false;
+        }
+
+    }
+);
+
+</script>
+
+</body>
+</html>
