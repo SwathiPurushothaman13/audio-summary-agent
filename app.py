@@ -133,11 +133,13 @@ def transcribe():
 
         # Transcribe
         segments, info = model.transcribe(
-            temp_path,
-            language=language,
-            beam_size=5,
-            vad_filter=True
-        )
+    temp_path,
+    language=language,
+    task="transcribe",
+    beam_size=5,
+    temperature=0,
+    vad_filter=True
+)
 
         transcript_parts = []
 
