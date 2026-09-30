@@ -209,10 +209,38 @@ function renderList(container, items) {
                 listItem.textContent = item;
 
             }
-            else {
+            else if (item && typeof item === "object") {
+
+                const person =
+                    item.person ||
+                    item.responsible ||
+                    "";
+
+                const task =
+                    item.task ||
+                    "";
+
+                const deadline =
+                    item.deadline ||
+                    "";
+
+                let displayText = "";
+
+                if (person) {
+                    displayText += person + ": ";
+                }
+
+                displayText +=
+                    task ||
+                    JSON.stringify(item);
+
+                if (deadline) {
+                    displayText +=
+                        " (" + deadline + ")";
+                }
 
                 listItem.textContent =
-                    JSON.stringify(item);
+                    displayText;
             }
 
             list.appendChild(
