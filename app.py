@@ -67,6 +67,20 @@ AUDIO_SUMMARY_JOB_URL = os.environ.get(
 
 
 # ---------------------------------------------------------
+# AUDIO SUMMARY STATUS FUNCTION
+# ---------------------------------------------------------
+
+AUDIO_SUMMARY_STATUS_URL = os.environ.get(
+    "AUDIO_SUMMARY_STATUS_URL",
+    (
+        "https://audiosummaryagent-60086819444."
+        "development.catalystserverless.in/"
+        "server/AudioSummaryJobStatus/"
+    )
+)
+
+
+# ---------------------------------------------------------
 # HOME
 # ---------------------------------------------------------
 
@@ -99,6 +113,54 @@ def health():
         "summary_pipeline":
             "enabled"
     })
+
+
+# ---------------------------------------------------------
+# SUMMARY STATUS
+# ---------------------------------------------------------
+
+@app.route("/summary-status/<job_id>", methods=["GET"])
+def summary_status(job_id):
+
+    try:
+
+        response = requests.get(
+            AUDIO_SUMMARY_STATUS_URL,
+            params={
+                "job_id": job_id
+            },
+            timeout=20
+        )
+
+        try:
+            data = response.json()
+
+        except ValueError:
+            return jsonify({
+                "status": "error",
+                "message":
+                    "Invalid response from "
+                    "AudioSummaryJobStatus."
+            }), 502
+
+        return jsonify(data), response.status_code
+
+    except requests.Timeout:
+
+        return jsonify({
+            "status": "error",
+            "message":
+                "Summary status request timed out."
+        }), 504
+
+    except requests.RequestException as error:
+
+        return jsonify({
+            "status": "error",
+            "message":
+                "Could not retrieve summary status.",
+            "details": str(error)
+        }), 502
 
 
 # ---------------------------------------------------------

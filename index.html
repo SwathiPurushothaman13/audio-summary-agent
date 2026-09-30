@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -7,7 +6,7 @@
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>Audio Transcription</title>
+    <title>Audio Summary</title>
 
     <style>
         body {
@@ -18,7 +17,7 @@
         }
 
         .container {
-            max-width: 700px;
+            max-width: 800px;
             margin: auto;
             background: white;
             padding: 30px;
@@ -28,6 +27,11 @@
 
         h1 {
             margin-top: 0;
+        }
+
+        h2 {
+            margin-top: 30px;
+            font-size: 18px;
         }
 
         label {
@@ -53,18 +57,28 @@
             font-size: 16px;
         }
 
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
         #status {
             margin-top: 20px;
             font-weight: bold;
         }
 
-        #transcript {
-            margin-top: 20px;
+        .result-box {
+            margin-top: 10px;
             padding: 15px;
             background: #f7f7f7;
             border-radius: 8px;
             white-space: pre-wrap;
-            min-height: 100px;
+            min-height: 50px;
+        }
+
+        ul {
+            margin-top: 8px;
+            padding-left: 25px;
         }
     </style>
 </head>
@@ -73,11 +87,11 @@
 
 <div class="container">
 
-    <h1>Audio Transcription</h1>
+    <h1>Audio Summary</h1>
 
     <p>
-        Upload a Japanese or Chinese MP3 recording
-        and convert it into text.
+        Upload a Japanese or Chinese MP3 recording.
+        The audio will be transcribed and summarized.
     </p>
 
     <label for="language">
@@ -105,12 +119,22 @@
     >
 
     <button id="transcribeButton">
-        Transcribe
+        Transcribe & Summarize
     </button>
 
     <div id="status"></div>
 
-    <div id="transcript"></div>
+    <h2>Transcript</h2>
+    <div id="transcript" class="result-box"></div>
+
+    <h2>Summary</h2>
+    <div id="summary" class="result-box"></div>
+
+    <h2>Key Points</h2>
+    <div id="keyPoints" class="result-box"></div>
+
+    <h2>Action Items</h2>
+    <div id="actionItems" class="result-box"></div>
 
 </div>
 
@@ -131,6 +155,147 @@ const transcript =
     document.getElementById(
         "transcript"
     );
+
+const summary =
+    document.getElementById(
+        "summary"
+    );
+
+const keyPoints =
+    document.getElementById(
+        "keyPoints"
+    );
+
+const actionItems =
+    document.getElementById(
+        "actionItems"
+    );
+
+
+function sleep(milliseconds) {
+
+    return new Promise(
+        resolve =>
+            setTimeout(
+                resolve,
+                milliseconds
+            )
+    );
+}
+
+
+function renderList(container, items) {
+
+    container.innerHTML = "";
+
+    if (!items || !items.length) {
+
+        container.textContent = "None";
+
+        return;
+    }
+
+    const list =
+        document.createElement("ul");
+
+    items.forEach(
+        item => {
+
+            const listItem =
+                document.createElement("li");
+
+            if (typeof item === "string") {
+
+                listItem.textContent = item;
+
+            }
+            else {
+
+                listItem.textContent =
+                    JSON.stringify(item);
+            }
+
+            list.appendChild(
+                listItem
+            );
+        }
+    );
+
+    container.appendChild(
+        list
+    );
+}
+
+
+async function pollSummary(jobId) {
+
+    const maxAttempts = 24;
+
+    for (
+        let attempt = 1;
+        attempt <= maxAttempts;
+        attempt++
+    ) {
+
+        const response =
+            await fetch(
+                "/summary-status/" +
+                encodeURIComponent(jobId)
+            );
+
+        const data =
+            await response.json();
+
+        if (!response.ok) {
+
+            throw new Error(
+                data.message ||
+                "Could not retrieve summary."
+            );
+        }
+
+        if (data.job_status === "success") {
+
+            summary.textContent =
+                data.summary ||
+                "No summary available.";
+
+            renderList(
+                keyPoints,
+                data.key_points
+            );
+
+            renderList(
+                actionItems,
+                data.action_items
+            );
+
+            status.textContent =
+                "Transcription and summary completed.";
+
+            return;
+        }
+
+        if (data.job_status === "error") {
+
+            throw new Error(
+                data.error_message ||
+                "Summary generation failed."
+            );
+        }
+
+        status.textContent =
+            "Summary status: " +
+            data.job_status +
+            "...";
+
+        await sleep(5000);
+    }
+
+    status.textContent =
+        "Transcription completed. " +
+        "Summary is still processing.";
+}
 
 
 button.addEventListener(
@@ -175,6 +340,9 @@ button.addEventListener(
             "Transcribing...";
 
         transcript.textContent = "";
+        summary.textContent = "";
+        keyPoints.textContent = "";
+        actionItems.textContent = "";
 
         button.disabled = true;
 
@@ -200,20 +368,36 @@ button.addEventListener(
                 );
             }
 
-            status.textContent =
-                "Transcription completed.";
-
             transcript.textContent =
                 data.transcript ||
                 "No speech was detected.";
+
+            const jobId =
+                data.summary_job &&
+                data.summary_job.job_id;
+
+            if (!jobId) {
+
+                status.textContent =
+                    "Transcription completed, " +
+                    "but summary job was not created.";
+
+                return;
+            }
+
+            status.textContent =
+                "Transcription completed. " +
+                "Generating summary...";
+
+            await pollSummary(
+                jobId
+            );
 
         }
         catch (error) {
 
             status.textContent =
-                "Error";
-
-            transcript.textContent =
+                "Error: " +
                 error.message;
         }
         finally {
