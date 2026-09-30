@@ -1,5 +1,4 @@
 import os
-import json
 import tempfile
 import threading
 
@@ -34,8 +33,10 @@ def get_whisper_model():
     if whisper_model is None:
         with whisper_lock:
             if whisper_model is None:
+
                 print(
-                    f"Loading Whisper model: {WHISPER_MODEL_NAME}"
+                    f"Loading Whisper model: "
+                    f"{WHISPER_MODEL_NAME}"
                 )
 
                 whisper_model = WhisperModel(
@@ -52,22 +53,16 @@ def get_whisper_model():
 
 
 # ---------------------------------------------------------
-# ZIA AGENT CONFIGURATION
+# AUDIO SUMMARY JOB FUNCTION
 # ---------------------------------------------------------
 
-ZIA_AGENT_ID = "2175000000268001"
-
-ZIA_ORG_ID = "60076591677"
-
-ZIA_ACCESS_TOKEN = os.environ.get(
-    "ZIA_ACCESS_TOKEN"
-)
-
-ZIA_TRIGGER_URL = (
-    "https://agents.zoho.in/"
-    "ziaagents/api/v1/agents/"
-    + ZIA_AGENT_ID
-    + "/trigger"
+AUDIO_SUMMARY_JOB_URL = os.environ.get(
+    "AUDIO_SUMMARY_JOB_URL",
+    (
+        "https://audiosummaryagent-60086819444."
+        "development.catalystserverless.in/"
+        "server/AudioSummaryZiaTrigger/"
+    )
 )
 
 
@@ -77,6 +72,7 @@ ZIA_TRIGGER_URL = (
 
 @app.route("/", methods=["GET"])
 def home():
+
     return send_from_directory(
         ".",
         "index.html"
@@ -89,6 +85,7 @@ def home():
 
 @app.route("/health", methods=["GET"])
 def health():
+
     return jsonify({
         "status": "success",
         "message":
@@ -99,8 +96,8 @@ def health():
             "ja",
             "zh"
         ],
-        "zia_agent_configured":
-            bool(ZIA_ACCESS_TOKEN)
+        "summary_pipeline":
+            "enabled"
     })
 
 
@@ -110,6 +107,7 @@ def health():
 
 @app.route("/transcribe", methods=["POST"])
 def transcribe():
+
     temp_path = None
 
     try:
@@ -119,15 +117,19 @@ def transcribe():
         # -------------------------------------------------
 
         if "audio" not in request.files:
+
             return jsonify({
                 "status": "error",
                 "message":
                     "Please upload an MP3 file."
             }), 400
 
+
         audio_file = request.files["audio"]
 
+
         if not audio_file.filename:
+
             return jsonify({
                 "status": "error",
                 "message":
@@ -148,10 +150,12 @@ def transcribe():
             .lower()
         )
 
+
         if language not in [
             "ja",
             "zh"
         ]:
+
             return jsonify({
                 "status": "error",
                 "message":
@@ -194,7 +198,7 @@ def transcribe():
 
 
         # -------------------------------------------------
-        # TRANSCRIBE
+        # TRANSCRIBE AUDIO
         # -------------------------------------------------
 
         segments, info = model.transcribe(
@@ -209,6 +213,7 @@ def transcribe():
 
         transcript_parts = []
 
+
         for segment in segments:
 
             text = (
@@ -217,6 +222,7 @@ def transcribe():
             )
 
             if text:
+
                 transcript_parts.append(
                     text
                 )
@@ -228,209 +234,29 @@ def transcribe():
 
 
         # -------------------------------------------------
-        # NO SPEECH
+        # NO SPEECH FOUND
         # -------------------------------------------------
 
         if not transcript:
+
             return jsonify({
-                "status": "success",
+                "status":
+                    "success",
+
                 "language":
                     language,
+
                 "transcript":
                     "",
+
                 "message":
                     "No speech was detected "
                     "in the recording."
             })
 
 
-        # -------------------------------------------------
-        # RETURN TRANSCRIPT
-        # -------------------------------------------------
-
-        return jsonify({
-            "status": "success",
-            "file_name":
-                audio_file.filename,
-            "language":
-                language,
-            "transcript":
-                transcript,
-            "duration_seconds":
-                getattr(
-                    info,
-                    "duration",
-                    None
-                )
-        })
-
-
-    except Exception as e:
-
         print(
-            "Transcription error:",
-            str(e)
-        )
-
-        return jsonify({
-            "status": "error",
-            "message":
-                str(e)
-        }), 500
-
-
-    finally:
-
-        if (
-            temp_path
-            and os.path.exists(
-                temp_path
-            )
-        ):
-            try:
-                os.remove(
-                    temp_path
-                )
-
-            except Exception:
-                pass
-
-
-# ---------------------------------------------------------
-# ZIA AGENT SUMMARY
-# ---------------------------------------------------------
-
-@app.route("/summarize", methods=["POST"])
-def summarize():
-
-    try:
-
-        # -------------------------------------------------
-        # READ INPUT
-        # -------------------------------------------------
-
-        data = (
-            request.get_json(
-                silent=True
-            )
-            or {}
-        )
-
-
-        language = (
-            data.get(
-                "language",
-                ""
-            )
-            .strip()
-            .lower()
-        )
-
-
-        transcript = (
-            data.get(
-                "transcript",
-                ""
-            )
-            .strip()
-        )
-
-
-        # -------------------------------------------------
-        # VALIDATE LANGUAGE
-        # -------------------------------------------------
-
-        if language not in [
-            "ja",
-            "zh"
-        ]:
-            return jsonify({
-                "status": "error",
-                "message":
-                    "Language must be "
-                    "'ja' or 'zh'."
-            }), 400
-
-
-        # -------------------------------------------------
-        # VALIDATE TRANSCRIPT
-        # -------------------------------------------------
-
-        if not transcript:
-            return jsonify({
-                "status": "error",
-                "message":
-                    "Transcript is required."
-            }), 400
-
-
-        # -------------------------------------------------
-        # CHECK TOKEN
-        # -------------------------------------------------
-
-        if not ZIA_ACCESS_TOKEN:
-            return jsonify({
-                "status": "error",
-                "message":
-                    "ZIA_ACCESS_TOKEN "
-                    "is not configured."
-            }), 500
-
-
-        # -------------------------------------------------
-        # PREPARE AGENT INPUT
-        # -------------------------------------------------
-
-        agent_input = {
-            "language":
-                language,
-            "transcript":
-                transcript
-        }
-
-
-        query_text = json.dumps(
-            agent_input,
-            ensure_ascii=False
-        )
-
-
-        payload = {
-            "query":
-                query_text,
-            "systemArgs":
-                {},
-            "reasoning":
-                False,
-            "attachments":
-                []
-        }
-
-
-        # -------------------------------------------------
-        # HEADERS
-        # -------------------------------------------------
-
-        headers = {
-            "Authorization":
-                f"Zoho-oauthtoken "
-                f"{ZIA_ACCESS_TOKEN}",
-
-            "X-ZIAAGENTS-ORG":
-                ZIA_ORG_ID,
-
-            "Content-Type":
-                "application/json"
-        }
-
-
-        print(
-            "Sending transcript to "
-            "Zia Agent"
-        )
-
-        print(
-            f"Language: {language}"
+            "Transcription completed successfully"
         )
 
         print(
@@ -440,168 +266,141 @@ def summarize():
 
 
         # -------------------------------------------------
-        # CALL ZIA AGENT
+        # CREATE AUDIO SUMMARY JOB
         # -------------------------------------------------
 
-        zia_response = requests.post(
-            ZIA_TRIGGER_URL,
-            headers=headers,
-            json=payload,
-            timeout=120
-        )
+        job_payload = {
+            "language":
+                language,
+
+            "transcript":
+                transcript
+        }
 
 
-        print(
-            "Zia HTTP status:",
-            zia_response.status_code
-        )
+        job_id = None
+        job_status = None
+        summary_job_message = None
 
-
-        # -------------------------------------------------
-        # PARSE API RESPONSE
-        # -------------------------------------------------
 
         try:
 
-            zia_data = (
-                zia_response.json()
+            print(
+                "Creating AudioSummaryJobs job"
             )
 
-        except ValueError:
+
+            job_response = requests.post(
+                AUDIO_SUMMARY_JOB_URL,
+                json=job_payload,
+                timeout=20
+            )
+
 
             print(
-                "Invalid Zia response:",
-                zia_response.text
+                "AudioSummaryZiaTrigger "
+                "HTTP status:",
+                job_response.status_code
             )
 
-            return jsonify({
-                "status": "error",
-                "message":
-                    "Zia Agent returned "
-                    "an invalid response."
-            }), 502
+
+            if job_response.status_code in [
+                200,
+                201,
+                202
+            ]:
+
+                try:
+
+                    job_data = (
+                        job_response.json()
+                    )
+
+                    job_id = (
+                        job_data.get(
+                            "job_id"
+                        )
+                    )
+
+                    job_status = (
+                        job_data.get(
+                            "job_status",
+                            "pending"
+                        )
+                    )
+
+                    summary_job_message = (
+                        job_data.get(
+                            "message"
+                        )
+                    )
 
 
-        # -------------------------------------------------
-        # HTTP FAILURE
-        # -------------------------------------------------
+                    print(
+                        "Summary job created:",
+                        job_id
+                    )
 
-        if (
-            zia_response.status_code
-            != 200
-        ):
+
+                except ValueError:
+
+                    summary_job_message = (
+                        "Summary job was created, "
+                        "but the response could "
+                        "not be parsed."
+                    )
+
+
+            else:
+
+                summary_job_message = (
+                    "Transcription succeeded, "
+                    "but summary job creation failed."
+                )
+
+                print(
+                    "Summary job creation failed:",
+                    job_response.text
+                )
+
+
+        except requests.Timeout:
+
+            summary_job_message = (
+                "Transcription succeeded, "
+                "but summary job creation timed out."
+            )
 
             print(
-                "Zia Agent API error:",
-                zia_data
+                "AudioSummaryZiaTrigger "
+                "request timed out"
             )
 
-            return jsonify({
-                "status": "error",
-                "message":
-                    "Zia Agent request "
-                    "failed.",
-                "zia_response":
-                    zia_data
-            }), zia_response.status_code
 
+        except requests.RequestException as error:
 
-        # -------------------------------------------------
-        # AGENT FAILURE
-        # -------------------------------------------------
-
-        if (
-            zia_data.get("status")
-            != "success"
-        ):
+            summary_job_message = (
+                "Transcription succeeded, "
+                "but summary job could "
+                "not be created."
+            )
 
             print(
-                "Zia execution error:",
-                zia_data
+                "Summary job request error:",
+                str(error)
             )
-
-            return jsonify({
-                "status": "error",
-                "message":
-                    "Zia Agent execution "
-                    "failed.",
-                "zia_response":
-                    zia_data
-            }), 502
 
 
         # -------------------------------------------------
-        # GET EXECUTION DATA
-        # -------------------------------------------------
-
-        execution_data = (
-            zia_data.get(
-                "data",
-                {}
-            )
-        )
-
-
-        raw_agent_response = (
-            execution_data
-            .get(
-                "response",
-                ""
-            )
-            .strip()
-        )
-
-
-        if not raw_agent_response:
-
-            return jsonify({
-                "status": "error",
-                "message":
-                    "Zia Agent returned "
-                    "an empty response."
-            }), 502
-
-
-        print(
-            "Zia Agent response received"
-        )
-
-
-        # -------------------------------------------------
-        # PARSE AGENT JSON
-        # -------------------------------------------------
-
-        try:
-
-            summary_data = json.loads(
-                raw_agent_response
-            )
-
-        except json.JSONDecodeError:
-
-            print(
-                "Could not parse "
-                "agent response:",
-                raw_agent_response
-            )
-
-            return jsonify({
-                "status": "error",
-                "message":
-                    "Unable to parse "
-                    "Zia Agent summary.",
-                "raw_response":
-                    raw_agent_response
-            }), 502
-
-
-        # -------------------------------------------------
-        # RETURN SUMMARY
+        # RETURN TRANSCRIPT + JOB DETAILS
         # -------------------------------------------------
 
         return jsonify({
             "status":
                 "success",
+
+            "file_name":
+                audio_file.filename,
 
             "language":
                 language,
@@ -609,87 +408,69 @@ def summarize():
             "transcript":
                 transcript,
 
-            "summary":
-                summary_data.get(
-                    "summary",
-                    ""
+            "duration_seconds":
+                getattr(
+                    info,
+                    "duration",
+                    None
                 ),
 
-            "key_points":
-                summary_data.get(
-                    "key_points",
-                    []
-                ),
+            "summary_job": {
+                "job_id":
+                    job_id,
 
-            "action_items":
-                summary_data.get(
-                    "action_items",
-                    []
-                ),
+                "status":
+                    job_status,
 
-            "execution_id":
-                execution_data.get(
-                    "executionId"
-                ),
-
-            "session_id":
-                execution_data.get(
-                    "sessionId"
-                )
+                "message":
+                    summary_job_message
+            }
         })
 
 
     # -----------------------------------------------------
-    # ZIA TIMEOUT
+    # TRANSCRIPTION ERROR
     # -----------------------------------------------------
 
-    except requests.Timeout:
+    except Exception as error:
 
         print(
-            "Zia Agent request timed out"
+            "Transcription error:",
+            str(error)
         )
 
-        return jsonify({
-            "status": "error",
-            "message":
-                "Zia Agent request "
-                "timed out."
-        }), 504
-
-
-    # -----------------------------------------------------
-    # OTHER ZIA ERRORS
-    # -----------------------------------------------------
-
-    except requests.RequestException as e:
-
-        print(
-            "Zia request error:",
-            str(e)
-        )
 
         return jsonify({
-            "status": "error",
+            "status":
+                "error",
+
             "message":
-                "Unable to connect "
-                "to Zia Agent.",
-            "error":
-                str(e)
-        }), 502
-
-
-    except Exception as e:
-
-        print(
-            "Summary error:",
-            str(e)
-        )
-
-        return jsonify({
-            "status": "error",
-            "message":
-                str(e)
+                str(error)
         }), 500
+
+
+    # -----------------------------------------------------
+    # CLEAN TEMP FILE
+    # -----------------------------------------------------
+
+    finally:
+
+        if (
+            temp_path
+            and os.path.exists(
+                temp_path
+            )
+        ):
+
+            try:
+
+                os.remove(
+                    temp_path
+                )
+
+            except Exception:
+
+                pass
 
 
 # ---------------------------------------------------------
@@ -705,10 +486,12 @@ if __name__ == "__main__":
         )
     )
 
+
     print(
         f"Starting Audio Summary "
         f"backend on port {port}"
     )
+
 
     app.run(
         host="0.0.0.0",
